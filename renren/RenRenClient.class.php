@@ -17,7 +17,7 @@
  */
 
 require_once 'RESTClient.class.php';
-require_once 'config.inc.php'; #Include configure resources
+// require_once 'config.inc.php'; #Include configure resources
 
  class RenRenClient extends RESTClient{
 
@@ -39,10 +39,9 @@ require_once 'config.inc.php'; #Include configure resources
 			);
 	
 	public function __construct(){
-	    global $config;
 		parent::__construct();
 		
-		$this->_config = $config;
+		$this->_config = $GLOBALS['config'];
 		
 		if(empty($this->_config->APIURL) || empty($this->_config->APIKey) || empty($this->_config->SecretKey)){
 			throw new exception('Invalid API URL or API key or Secret key, please check config.inc.php');

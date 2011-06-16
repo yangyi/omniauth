@@ -13,8 +13,8 @@
 $config				= new stdClass;
 
 $config->APIURL		= 'http://api.xiaonei.com/restserver.do'; //RenRen网的API调用地址，不需要修改
-$config->APIKey		= '4641d1d0fbf341f5a8f88b7ca32b7587';	//你的API Key，请自行申请
-$config->SecretKey	= '75868da6129e40c0a005432aa01baf06';	//你的API 密钥
+$config->APIKey		= '';	//你的API Key，请自行申请
+$config->SecretKey	= '';	//你的API 密钥
 $config->APIVersion	= '1.0';	//当前API的版本号，不需要修改
 $config->decodeFormat	= 'json';	//默认的返回格式，根据实际情况修改，支持：json,xml
 /*
