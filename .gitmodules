@@ -1,0 +1,6 @@
+[submodule "oauth2"]
+	path = oauth2
+	url = git@github.com:yangyi/oauth_2.0_client_php.git
+[submodule "oauth1"]
+	path = oauth1
+	url = https://github.com/themattharris/tmhOAuth.git
