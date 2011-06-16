@@ -1,3 +1,6 @@
 <?php 
 
-require 'base';
+function init()
+{
+    require_once 'base.php';
+}
