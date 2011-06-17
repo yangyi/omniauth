@@ -7,31 +7,71 @@ require 'renren/RenRenClient.class.php';
 
 class Base
 {
-    static $platforms = array(
-        'renren' => array(
-            'strategy' => 'oauth2',
-            'authorize' => 'https://graph.renren.com/oauth/authorize',
-            'access_token' => 'https://graph.renren.com/oauth/token',
-            'session_key' => 'https://graph.renren.com/renren_api/session_key',
-            'api' => 'https://api.renren.com/restserver.do'
-        )
+    
+    static $strategies = array();
+    
+    function __construct() {
+    }
+    
+    static function useIt($provider, $options)
+    {
+        $class = 'OmniAuth\\' . ucwords($provider);
+        static::$strategies[$provider] = new $class($options);
+    }
+    
+    static function strategy($provider) {
+        return static::$strategies[$provider];
+    }
+}
+
+class Strategy
+{
+    
+    static function curlIt($url, $params, $method = 'GET', $format = 'json')
+    {
+        $ch = curl_init();
+
+        // set URL and other appropriate options
+        foreach ($params as $key => $value) {
+            $pa[] = "$key=" . urlencode($value);
+        }
+        curl_setopt($ch, CURLOPT_URL, "$url?" .  implode('&', $pa));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
+        
+        if ($method == 'POST') {
+            curl_setopt($ch, CURLOPT_POST, TRUE);
+        }
+        $text = curl_exec($ch);
+        // echo "response is $text";
+        $response = json_decode($text, TRUE);
+        curl_close($ch);
+        return $response;
+    }
+
+}
+
+
+class Renren extends Strategy
+{
+    static $conf = array(
+        'strategy' => 'oauth2',
+        'authorize' => 'https://graph.renren.com/oauth/authorize',
+        'access_token' => 'https://graph.renren.com/oauth/token',
+        'session_key' => 'https://graph.renren.com/renren_api/session_key',
+        'api' => 'https://api.renren.com/restserver.do'
     );
     
-    
-    function __construct($platform, $options) {
-        $this->_platform = $platform;
-        $this->_options = $options;
+    function __construct($options)
+    {
 
-        $conf = static::$platforms[$platform];
-        
         $client = new \OAuth2_Client(
                 $options['api_key'],
                 $options['secret'],
                 $options['callback']);
     
         $configuration = new \OAuth2_Service_Configuration(
-                $conf['authorize'],
-                $conf['access_token']);
+                static::$conf['authorize'],
+                static::$conf['access_token']);
         
         $dataStore = new \OAuth2_DataStore_Session();
         
@@ -61,13 +101,7 @@ class Base
         		*/
         );
         
-        $GLOBALS['config'] = $config;
-        
-    }
-    
-    static function useIt($platform, $options)
-    {
-        return new Base($platform, $options);
+        $GLOBALS['_renren_config'] = $config;
     }
     
     function authorizeUrl()
@@ -75,21 +109,22 @@ class Base
         return $this->_service->authorize();
     }
     
-    function callback($code)
+    function callback($code = null)
     {
+        if ($code == null) {
+            $code = $_GET['code'];
+        }
         $token = $this->_service->getAccessToken($code);
         $this->access_token = $token->getAccessToken();
     }
     
     function getUserInfo()
     {
-        $url = static::$platforms[$this->_platform]['session_key'];
+        $url = static::$conf['session_key'];
         $sk = static::curlIt($url, array('oauth_token' => $this->access_token));
         
         $session_key = $sk["renren_token"]["session_key"];
 
-        $conf = static::$platforms[$this->_platform];
-        
         $renren = new \RenRenClient();
         $renren->setSessionKey($session_key);
         $user = $renren->POST('users.getLoggedInUser');
@@ -99,25 +134,97 @@ class Base
             'nickname' => $result[0]->name
         );
     }
+}
 
-    static function curlIt($url, $params, $method = 'GET', $format = 'json')
+class OAuth extends Strategy {
+    function __construct($options)
     {
-        $ch = curl_init();
-
-        // set URL and other appropriate options
-        foreach ($params as $key => $value) {
-            $pa[] = "$key=" . urlencode($value);
-        }
-        curl_setopt($ch, CURLOPT_URL, "$url?" .  implode('&', $pa));
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, TRUE);
-        
-        if ($method == 'POST') {
-            curl_setopt($ch, CURLOPT_POST, TRUE);
-        }
-        $text = curl_exec($ch);
-        // echo "response is $text";
-        $response = json_decode($text, TRUE);
-        curl_close($ch);
-        return $response;
+        $this->_service = new \tmhOAuth(array(
+          'consumer_key'    => $options['api_key'],
+          'consumer_secret' => $options['secret'],
+          'host' => static::$conf['host'],
+          'use_ssl' => false,
+          'oauth_http_header' => static::$conf['oauth_http_header']
+        ));
+        $this->_options = $options;
     }
+    
+    function authorizeUrl()
+    {
+        $oauth = $this->_service;
+        $oauth->request('GET', $oauth->url(static::$conf['request_token'], ''), array(
+          'oauth_callback' => $this->_options['callback']
+        ));
+        
+        $_SESSION['oauth'] = $oauth->extract_params($oauth->response['response']);
+        $oauth_token = $_SESSION['oauth']['oauth_token'];
+        $aurl = $oauth->url(static::$conf['authorize'], '') . "?oauth_token=$oauth_token";
+        return $aurl;
+    }
+    
+    function callback()
+    {
+        $tmhOAuth = $this->_service;
+        $tmhOAuth->config['user_token']  = $_SESSION['oauth']['oauth_token'];
+        $tmhOAuth->config['user_secret'] = $_SESSION['oauth']['oauth_token_secret'];
+
+        $tmhOAuth->request('POST', $tmhOAuth->url('oauth/access_token', ''), array(
+          'oauth_verifier' => $_REQUEST['oauth_verifier']
+        ));
+        $_SESSION['access_token'] = $tmhOAuth->extract_params($tmhOAuth->response['response']);
+        unset($_SESSION['oauth']);
+    }
+    
+    function getUserInfo()
+    {
+        return "userinfo";
+    }
+}
+
+class Tsina extends OAuth
+{
+    static $conf = array(
+        'host' => 'api.t.sina.com.cn',
+        'authorize' => 'oauth/authorize',
+        'request_token' => 'oauth/request_token',
+        'access_token' => 'oauth/access_token',
+        'oauth_http_header' => true
+    );
+    
+    
+}
+
+class Qzone extends OAuth
+{
+    static $conf = array(
+        'host' => 'openapi.qzone.qq.com',
+        'authorize' => 'oauth/qzoneoauth_authorize',
+        'request_token' => 'oauth/qzoneoauth_request_token',
+        'access_token' => 'oauth/qzoneoauth_access_token',
+        'oauth_http_header' => false
+    );
+    
+    function authorizeUrl()
+    {
+        $oauth = $this->_service;
+        $oauth->request('GET', $oauth->url(static::$conf['request_token'], ''), array(
+          'oauth_callback' => $this->_options['callback']
+        ));
+        
+        $_SESSION['oauth'] = $oauth->extract_params($oauth->response['response']);
+        $oauth_token = $_SESSION['oauth']['oauth_token'];
+        $params = array(
+            'oauth_token' => $oauth_token,
+            'oauth_consumer_key' => $this->_options['api_key'],
+            'oauth_callback' => $this->_options['callback']
+        );
+        $aurl = $oauth->url(static::$conf['authorize'], '');
+        
+        foreach ($params as $key => $value) {
+            $kv[] = $key . "=" . urlencode($value);
+        }
+        
+        return $aurl . "?" . implode("&", $kv);
+    }
+    
 }

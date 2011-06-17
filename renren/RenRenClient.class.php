@@ -41,7 +41,7 @@ require_once 'RESTClient.class.php';
 	public function __construct(){
 		parent::__construct();
 		
-		$this->_config = $GLOBALS['config'];
+		$this->_config = $GLOBALS['_renren_config'];
 		
 		if(empty($this->_config->APIURL) || empty($this->_config->APIKey) || empty($this->_config->SecretKey)){
 			throw new exception('Invalid API URL or API key or Secret key, please check config.inc.php');
